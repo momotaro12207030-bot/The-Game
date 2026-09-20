@@ -1,0 +1,92 @@
+name: Create JEV Probability Lens Vercel Project
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare standalone app
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f jev-probability-lens/index.html
+          test -f jev-probability-lens/api/probability.js
+          node --check jev-probability-lens/api/probability.js
+          node --check jev-probability-lens/api/health.js
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest --no-audit --no-fund
+
+      - name: Login to Vercel
+        shell: bash
+        run: |
+          CI=0 NO_COLOR=1 script -q -e -c "vercel login" /dev/null
+
+      - name: Pull existing Jev secret securely
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p old-project/.vercel
+          printf '%s\n' '{"projectId":"prj_ggHpzDOAvkgkExhxZagJvvML8wFm","orgId":"team_tuvwyR6RVI33ZZMqWySySD16"}' > old-project/.vercel/project.json
+          cd old-project
+          vercel env pull ../old-production.env --environment=production --yes --scope gaming-ch >/dev/null
+          cd ..
+          node <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('old-production.env','utf8');
+          const m=s.match(/^TYPESAFE_API_KEY=(.*)$/m);
+          if(!m) throw new Error('TYPESAFE_API_KEY not found in existing Vercel project');
+          let v=m[1].trim();
+          if((v.startsWith('"')&&v.endsWith('"'))||(v.startsWith("'")&&v.endsWith("'"))) v=v.slice(1,-1);
+          fs.writeFileSync('typesafe.key',v,{mode:0o600});
+          NODE
+          rm -f old-production.env
+
+      - name: Create and link standalone Vercel project
+        working-directory: jev-probability-lens
+        shell: bash
+        run: |
+          set -euo pipefail
+          vercel project inspect jev-probability-lens --scope gaming-ch >/dev/null 2>&1 || vercel project add jev-probability-lens --scope gaming-ch
+          vercel link --yes --project jev-probability-lens --scope gaming-ch
+
+      - name: Configure Jev secret
+        working-directory: jev-probability-lens
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Remove stale values if they already exist; ignore if absent.
+          vercel env rm TYPESAFE_API_KEY production --yes --scope gaming-ch >/dev/null 2>&1 || true
+          cat ../typesafe.key | vercel env add TYPESAFE_API_KEY production --sensitive --scope gaming-ch >/dev/null
+          vercel env rm TYPESAFE_API_KEY preview --yes --scope gaming-ch >/dev/null 2>&1 || true
+          cat ../typesafe.key | vercel env add TYPESAFE_API_KEY preview --sensitive --scope gaming-ch >/dev/null
+          rm -f ../typesafe.key
+
+      - name: Deploy standalone Probability Lens
+        working-directory: jev-probability-lens
+        shell: bash
+        run: |
+          set -euo pipefail
+          vercel deploy --prod --yes --scope gaming-ch | tee ../deployment-url.txt
+
+      - name: Verify standalone app
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 3
+          URL=$(tail -n 1 deployment-url.txt | tr -d '\r')
+          curl -fsS "$URL/" | grep -q "JEV PROBABILITY LENS"
+          curl -fsS "$URL/api/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);if(!j.ready||j.app!=="jev-probability-lens")process.exit(1);console.log(JSON.stringify({ready:j.ready,model:j.model,app:j.app,key_exposed:j.key_exposed}))})'
+          curl -fsS -X POST "$URL/api/probability" \
+            -H 'Content-Type: application/json' \
+            --data '{"state":"かわいい猫","type":"noul","instructions":"この言葉はポジティブな印象を強く与えるか？","options":[]}' |
+            node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);if(!j.ok||typeof j.probability_yes!=="number")process.exit(1);console.log(JSON.stringify({ok:j.ok,model:j.model,probability_yes:j.probability_yes,latency_ms:j.latency_ms}))})'
