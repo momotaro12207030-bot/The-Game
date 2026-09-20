@@ -25,6 +25,7 @@ jobs:
           # Keep the currently published, working frontend.
           curl -fLsS https://afterlightjevgame.vercel.app/ -o deploy/index.html
           curl -fLsS https://afterlightjevgame.vercel.app/game.js -o deploy/game.js
+          node afterlight-deploy/patch-game.mjs
           curl -fLsS https://afterlightjevgame.vercel.app/director.js -o deploy/director.js
 
           # Add the corrected Vercel server-side Jev bridge.
@@ -35,6 +36,7 @@ jobs:
 
           printf '%s\n' '{"projectId":"prj_ggHpzDOAvkgkExhxZagJvvML8wFm","orgId":"team_tuvwyR6RVI33ZZMqWySySD16"}' > deploy/.vercel/project.json
 
+          node --check deploy/game.js
           node --check deploy/director.mjs
           node --check deploy/api/director.js
           node --check deploy/api/health.js
