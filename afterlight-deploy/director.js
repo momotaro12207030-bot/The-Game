@@ -1,3 +1,6 @@
+/* AFTERLIGHT - Jev director. No secrets, telemetry only. Shared by browser and bridge. */
+(function(root){
+'use strict';
 const PATTERNS=['ribbon','slalom','gates','comets','braid','helix','bloom','rush'];
 const BIOMES=['aurora','ember','prism','abyss'];
 const GIMMICKS=['crystal','laser','mine','shard','tower','phase','vortex'];
@@ -32,4 +35,6 @@ function parseDecision(raw,telemetry){
  if(passive&&!recovery){if(pressure==='calm')pressure='steady';if(t.seconds>35)pressure='intense';if(['ribbon','bloom'].includes(pattern))pattern='slalom';if(['crystal','vortex'].includes(gimmick))gimmick=t.seconds>35?'laser':'phase';}
  return {pattern,gimmick,pressure,biome:read('biome',BIOMES,t.biome),bias:read('bias',['left','center','right'],'center'),recovery,source:'jev',model:typeof raw.model==='string'?raw.model.slice(0,80):'jev-latest',confidence:Number.isFinite(Number(a.pattern.confidence))?Number(a.pattern.confidence):null};
 }
-export {PATTERNS,BIOMES,GIMMICKS,cleanTelemetry,buildRequest,parseDecision};
+const api={PATTERNS,BIOMES,GIMMICKS,cleanTelemetry,buildRequest,parseDecision};
+if(typeof module==='object'&&module.exports)module.exports=api;else root.JevDirector=api;
+})(typeof globalThis!=='undefined'?globalThis:this);

@@ -21,22 +21,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deploy/.vercel
-
-          # Keep the currently published, working frontend.
           curl -fLsS https://afterlightjevgame.vercel.app/ -o deploy/index.html
-          curl -fLsS https://afterlightjevgame.vercel.app/game.js -o deploy/game.js
-          node afterlight-deploy/patch-game.mjs
-          curl -fLsS https://afterlightjevgame.vercel.app/director.js -o deploy/director.js
-
-          # Add the corrected Vercel server-side Jev bridge.
+          cp afterlight-deploy/game.js deploy/game.js
+          cp afterlight-deploy/director.js deploy/director.js
           cp afterlight-deploy/director.mjs deploy/director.mjs
           cp -R afterlight-deploy/api deploy/api
           cp afterlight-deploy/package.json deploy/package.json
           cp afterlight-deploy/vercel.json deploy/vercel.json
-
           printf '%s\n' '{"projectId":"prj_ggHpzDOAvkgkExhxZagJvvML8wFm","orgId":"team_tuvwyR6RVI33ZZMqWySySD16"}' > deploy/.vercel/project.json
-
           node --check deploy/game.js
+          node --check deploy/director.js
           node --check deploy/director.mjs
           node --check deploy/api/director.js
           node --check deploy/api/health.js
@@ -50,27 +44,21 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          if [ -n "$VERCEL_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
+          if [ -n "$VERCEL_TOKEN" ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Deploy with repository Vercel token
         if: steps.token.outputs.present == 'true'
         working-directory: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          vercel whoami --token "$VERCEL_TOKEN"
-          vercel deploy --prod --yes --scope gaming-ch --token "$VERCEL_TOKEN"
+        run: vercel deploy --prod --yes --scope gaming-ch --token "$VERCEL_TOKEN"
 
       - name: Login and deploy with Vercel Device Flow
         if: steps.token.outputs.present != 'true'
         working-directory: deploy
         shell: bash
         run: |
-          echo "::notice::No VERCEL_TOKEN repository secret found. Starting Vercel CLI login."
+          echo "::notice::Starting Vercel CLI login."
           CI=0 NO_COLOR=1 script -q -e -c "vercel login" /dev/null
           vercel deploy --prod --yes --scope gaming-ch
 
